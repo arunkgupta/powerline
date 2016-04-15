@@ -43,9 +43,15 @@ def get_preferred_output_encoding():
 		Falls back to ASCII, so that output is most likely to be displayed 
 		correctly.
 	'''
+	if hasattr(locale, 'LC_MESSAGES'):
+		return (
+			locale.getlocale(locale.LC_MESSAGES)[1]
+			or locale.getdefaultlocale()[1]
+			or 'ascii'
+		)
+
 	return (
-		locale.getlocale(locale.LC_MESSAGES)[1]
-		or locale.getdefaultlocale()[1]
+		locale.getdefaultlocale()[1]
 		or 'ascii'
 	)
 
@@ -57,9 +63,15 @@ def get_preferred_input_encoding():
 		Falls back to latin1 so that function is less likely to throw as decoded 
 		output is primary searched for ASCII values.
 	'''
+	if hasattr(locale, 'LC_MESSAGES'):
+		return (
+			locale.getlocale(locale.LC_MESSAGES)[1]
+			or locale.getdefaultlocale()[1]
+			or 'latin1'
+		)
+
 	return (
-		locale.getlocale(locale.LC_MESSAGES)[1]
-		or locale.getdefaultlocale()[1]
+		locale.getdefaultlocale()[1]
 		or 'latin1'
 	)
 
@@ -86,3 +98,28 @@ def get_preferred_environment_encoding():
 		locale.getpreferredencoding()
 		or 'utf-8'
 	)
+
+
+def get_unicode_writer(stream=sys.stdout, encoding=None, errors='replace'):
+	'''Get function which will write unicode string to the given stream
+
+	Writing is done using encoding returned by 
+	:py:func:`get_preferred_output_encoding`.
+
+	:param file stream:
+		Stream to write to. Default value is :py:attr:`sys.stdout`.
+	:param str encoding:
+		Determines which encoding to use. If this argument is specified then 
+		:py:func:`get_preferred_output_encoding` is not used.
+	:param str errors:
+		Determines what to do with characters which cannot be encoded. See 
+		``errors`` argument of :py:func:`codecs.encode`.
+
+	:return: Callable which writes unicode string to the given stream using 
+	         the preferred output encoding.
+	'''
+	encoding = encoding or get_preferred_output_encoding()
+	if sys.version_info < (3,) or not hasattr(stream, 'buffer'):
+		return lambda s: stream.write(s.encode(encoding, errors))
+	else:
+		return lambda s: stream.buffer.write(s.encode(encoding, errors))

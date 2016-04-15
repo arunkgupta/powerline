@@ -309,11 +309,16 @@ class Spec(object):
 		``self.specs[start:end]`` is matched by the given value.
 		'''
 		havemarks(value)
-		new_echoerr = DelayedEchoErr(echoerr)
+		new_echoerr = DelayedEchoErr(
+			echoerr,
+			'One of the either variants failed. Messages from the first variant:',
+			'messages from the next variant:'
+		)
 
 		hadproblem = False
 		for spec in self.specs[start:end]:
 			proceed, hadproblem = spec.match(value, value.mark, data, context, new_echoerr)
+			new_echoerr.next_variant()
 			if not proceed:
 				break
 			if not hadproblem:
@@ -526,7 +531,8 @@ class Spec(object):
 		if max_len == min_len:
 			self.len('eq', len(specs))
 		else:
-			self.len('ge', min_len)
+			if min_len > 0:
+				self.len('ge', min_len)
 			self.len('le', max_len)
 
 		start = len(self.specs)

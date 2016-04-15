@@ -12,7 +12,7 @@ object it should receive the following arguments:
 
 ``pl``
     A :py:class:`powerline.PowerlineLogger` instance. It must be used every time 
-    you need to log something.
+    something needs to be logged.
 
 ``segment_info``
     A dictionary. It is only received if callable has 
@@ -32,20 +32,21 @@ And also any other argument(s) specified by user in :ref:`args key
 .. note::
     For powerline-lint to work properly the following things may be needed:
 
-    #. If your segment is a :py:class:`powerline.segments.Segment` and used 
+    #. If segment is a :py:class:`powerline.segments.Segment` instance and used 
        arguments are scattered over multiple methods 
        :py:meth:`powerline.segments.Segment.argspecobjs` should be overridden in 
        subclass to tell powerline-lint which objects should be inspected for 
        arguments.
-    #. If your segment takes some arguments that are never listed, but accessed 
-       via ``kwargs.get()`` or you cannot use previous function for whatever 
-       reason :py:meth:`powerline.segments.Segment.additional_args` should be 
+    #. If segment takes some arguments that are never listed, but accessed via 
+       ``kwargs.get()`` or previous function cannot be used for whatever reason 
+       :py:meth:`powerline.segments.Segment.additional_args` should be 
        overridden in subclass.
-    #. If you are expecting user to use one :ref:`name <config-themes-seg-name>` 
-       for multiple segments which cannot be linked to the segment function 
+    #. If user is expected to use one :ref:`name <config-themes-seg-name>` for 
+       multiple segments which cannot be linked to the segment function 
        automatically by powerline-lint (e.g. because there are no instances of 
-       the segments in question in the default configuration) you should use 
-       :py:func:`powerline.lint.checks.register_common_name`.
+       the segments in question in the default configuration) 
+       :py:func:`powerline.lint.checks.register_common_name` function should be 
+       used.
 
 Object representing segment may have the following attributes used by 
 powerline:
@@ -110,7 +111,7 @@ powerline:
 
       .. warning::
          “Amount of display cells” is *not* number of Unicode codepoints, string 
-         length, or byte count. It is suggested that your function should look 
+         length, or byte count. It is suggested that this function should look 
          something like ``return (' ' * amount) + segment['contents']`` where 
          ``' '`` may be replaced with anything that is known to occupy exactly 
          one display cell.
@@ -139,7 +140,7 @@ value:
 
     [{
         'contents': original_return,
-        'highlight_group': [segment_name],
+        'highlight_groups': [segment_name],
     }]
 
 .. _dev-segments-return:
@@ -152,9 +153,33 @@ All keys in segments returned by the function override those obtained from
 
 Detailed description of used dictionary keys:
 
+.. _dev-segments-contents:
+
 ``contents``
     Text displayed by segment. Should be a ``unicode`` (Python2) or ``str`` 
     (Python3) instance.
+
+``literal_contents``
+    Text that needs to be output literally (i.e. without passing through 
+    :py:meth:`powerline.renderer.strwidth` to determine length, through
+    :py:meth:`powerline.renderer.escape` to escape special characters and 
+    through :py:meth:`powerline.renderer.hl` to highlight it). Should be a tuple
+    ``(contents_length, contents)`` where ``contents_length`` is an integer and 
+    ``contents`` is a ``unicode`` (Python2) or ``str`` (Python3) instance.
+
+    If this key is present and its second value is true then other contents keys 
+    (:ref:`contents <dev-segments-contents>`, :ref:`after
+    <config-themes-seg-after>`, :ref:`before <config-themes-seg-before>`) will 
+    be ignored.
+
+    .. note::
+       If target is inclusion of the segment in powerline upstream all segment 
+       functions that output *only* subsegments with ``literal_contents`` key
+       must contain the following string in documentation::
+
+           No highlight groups are used (literal segment).
+
+       String must be present on the separate line.
 
 .. _dev-segments-draw_inner_divider:
 
@@ -163,31 +188,32 @@ Detailed description of used dictionary keys:
     as :ref:`the similar keys in configuration <config-themes-seg-draw_divider>` 
     (:ref:`draw_inner_divider <config-themes-seg-draw_inner_divider>`).
 
-.. _dev-segments-highlight_group:
+.. _dev-segments-highlight_groups:
 
-``highlight_group``
+``highlight_groups``
     Determines segment highlighting. Refer to :ref:`themes documentation 
-    <config-themes-seg-highlight_group>` for more details.
+    <config-themes-seg-highlight_groups>` for more details.
 
     Defaults to the name of the segment.
 
     .. note::
-        If you want to include your segment in powerline you must specify all 
-        highlighting groups used in the segment documentation in the form::
+       If target is inclusion of the segment in powerline upstream all used 
+       highlighting groups must be specified in the segment documentation in the 
+       form::
 
-            Highlight groups used: ``g1``[ or ``g2``]*[, ``g3`` (gradient)[ or ``g4``]*]*.
+           Highlight groups used: ``g1``[ or ``g2``]*[, ``g3`` (gradient)[ or ``g4``]*]*.
 
-        I.e. use::
+       I.e. use::
 
-            Highlight groups used: ``foo_gradient`` (gradient) or ``foo``, ``bar``.
+           Highlight groups used: ``foo_gradient`` (gradient) or ``foo``, ``bar``.
 
-        to specify that your segment uses *either* ``foo_gradient`` group or 
-        ``foo`` group *and* ``bar`` group meaning that ``powerline-lint`` will 
-        check that at least one of the first two groups is defined (and if 
-        ``foo_gradient`` is defined it must use at least one gradient color) and 
-        third group is defined as well.
+       to specify that the segment uses *either* ``foo_gradient`` group or 
+       ``foo`` group *and* ``bar`` group meaning that ``powerline-lint`` will 
+       check that at least one of the first two groups is defined (and if 
+       ``foo_gradient`` is defined it must use at least one gradient color) and 
+       third group is defined as well.
 
-        You must specify all groups on one line.
+       All groups must be specified on one line.
 
 ``divider_highlight_group``
     Determines segment divider highlight group. Only applicable for soft 
@@ -195,19 +221,20 @@ Detailed description of used dictionary keys:
     segments.
 
     .. note::
-        If you want to include your segment in powerline you must specify used 
-        groups in the segment documentation in the form::
+       If target is inclusion of the segment in powerline upstream used divider 
+       highlight group must be specified in the segment documentation in the 
+       form::
 
             Divider highlight group used: ``group``.
 
-        This text must not wrap and you are supposed to end all divider 
-        highlight group names with ``:divider``: e.g. ``cwd:divider``.
+        This text must not wrap and all divider highlight group names are 
+        supposed to end with ``:divider``: e.g. ``cwd:divider``.
 
 ``gradient_level``
     First and the only key that may not be specified in user configuration. It 
     determines which color should be used for this segment when one of the 
-    highlighting groups specified by :ref:`highlight_group 
-    <dev-segments-highlight_group>` was defined to use the color gradient.
+    highlighting groups specified by :ref:`highlight_groups 
+    <dev-segments-highlight_groups>` was defined to use the color gradient.
 
     This key may have any value from 0 to 100 inclusive, value is supposed to be 
     an ``int`` or ``float`` instance.
@@ -243,7 +270,7 @@ Segment dictionary contains the following keys:
     :ref:`Segment type <config-themes-seg-type>`. Always represents actual type 
     and is never ``None``.
 
-  ``highlight_group``, ``divider_highlight_group``
+  ``highlight_groups``, ``divider_highlight_group``
     Used highlight groups. May be ``None``.
 
   ``highlight_group_prefix``
@@ -278,7 +305,7 @@ Segment dictionary contains the following keys:
   ``side``
     Segment side: ``right`` or ``left``.
 
-  ``display_condition```
+  ``display_condition``
     Contains function that takes three position parameters: 
     :py:class:`powerline.PowerlineLogger` instance, :ref:`segment_info 
     <dev-segments-info>` dictionary and current mode and returns either ``True`` 
@@ -330,16 +357,19 @@ keys:
     have ``__getitem__`` and ``get`` methods and nothing more.
 
     .. warning::
-        You must not ever use ``os.environ``. If your segment is run in daemon 
-        you will get daemon’s environment which is not correct. If your segment 
-        is run in Vim or in zsh with libzpython you will get Vim or zsh 
-        environment at python startup.
+       ``os.environ`` must not ever be used:
+
+       * If segment is run in the daemon this way it will get daemon’s 
+         environment which is not correct.
+       * If segment is run in Vim or in zsh with libzpython ``os.environ`` will 
+         contain Vim or zsh environ *at the moment Python interpreter was 
+         loaded*.
 
 ``getcwd``
     Function that returns current working directory being called with no 
-    arguments. You must not use ``os.getcwd`` for the same reasons you must not 
-    use ``os.environ``, except that current working directory is valid in Vim 
-    and zsh (but not in daemon).
+    arguments. ``os.getcwd`` must not be used for the same reasons the use of 
+    ``os.environ`` is forbidden, except that current working directory is valid 
+    in Vim and zsh (but not in daemon).
 
 ``home``
     Current home directory. May be false.
@@ -352,36 +382,36 @@ Vim
 Vim ``segment_info`` argument is a dictionary with the following keys:
 
 ``window``
-    ``vim.Window`` object. You may obtain one using ``vim.current.window`` or 
-    ``vim.windows[number - 1]``. May be a false object, in which case you should 
-    not use any of this objects’ properties.
+    ``vim.Window`` object. ``vim.current.window`` or ``vim.windows[number - 1]`` 
+    may be used to obtain such object. May be a false object, in which case any 
+    of this object’s properties must not be used.
 
 ``winnr``
     Window number. Same as ``segment_info['window'].number`` *assuming* Vim is 
     new enough for ``vim.Window`` object to have ``number`` attribute.
 
 ``window_id``
-    Internal powerline window id, unique for each newly created window. You 
-    should assume that this ID is hashable and supports equality comparison, but 
-    you must not use any other assumptions about it. Currently uses integer 
+    Internal powerline window id, unique for each newly created window. It is 
+    safe to assume that this ID is hashable and supports equality comparison, 
+    but no other assumptions about it should be used. Currently uses integer 
     numbers incremented each time window is created.
 
 ``buffer``
-    ``vim.Buffer`` object. You may obtain one using ``vim.current.buffer``, 
+    ``vim.Buffer`` object. One may be obtained using ``vim.current.buffer``, 
     ``segment_info['window'].buffer`` or ``vim.buffers[some_number]``. Note that 
     in the latter case depending on vim version ``some_number`` may be ``bufnr`` 
     or the internal Vim buffer index which is *not* buffer number. For this 
     reason to get ``vim.Buffer`` object other then stored in ``segment_info`` 
-    dictionary you must iterate over ``vim.buffers`` and check their ``number`` 
-    attributes.
+    dictionary iteration over ``vim.buffers`` and checking their ``number`` 
+    attributes should be performed.
 
 ``bufnr``
     Buffer number.
 
 ``tabpage``
-    ``vim.Tabpage`` object. You may obtain one using ``vim.current.tabpage`` or 
-    ``vim.tabpages[number - 1]``. May be a false object, in which case you 
-    should not use any of this objects’ properties.
+    ``vim.Tabpage`` object. One may be obtained using ``vim.current.tabpage`` or 
+    ``vim.tabpages[number - 1]``. May be a false object, in which case no 
+    object’s properties can be used.
 
 ``tabnr``
     Tabpage number.
@@ -394,18 +424,18 @@ Vim ``segment_info`` argument is a dictionary with the following keys:
     should be used to convert return values.
 
 .. note::
-    Your segment generally should not assume that it is run for the current 
-    window, current buffer or current tabpage. “Current window” and “current 
-    buffer” restrictions may be ignored if you use ``window_cached`` decorator, 
-    “current tabpage” restriction may be safely ignored if you do not plan to 
-    ever see your segment in the tabline.
+   Segment generally should not assume that it is run for the current window, 
+   current buffer or current tabpage. “Current window” and “current buffer” 
+   restrictions may be ignored if ``window_cached`` decorator is used, “current 
+   tabpage” restriction may be safely ignored if segment is not supposed to be 
+   used in tabline.
 
 .. warning::
-    Powerline is being tested with vim-7.2 and will be tested with it until 
-    travis changes used vim version. This means that you may not use most of the 
-    functionality like ``vim.Window.number``, ``vim.*.vars``, ``vim.*.options`` 
-    or even ``dir(vim object)`` if you want your segment to be included in 
-    powerline.
+   Powerline is being tested with vim-7.0.112 (some minor sanity check) and 
+   latest Vim. This means that most of the functionality like 
+   ``vim.Window.number``, ``vim.*.vars``, ``vim.*.options`` or even ``dir(vim 
+   object)`` should be avoided in segments that want to be included in the 
+   upstream.
 
 Shell
 -----
@@ -416,24 +446,29 @@ Shell
     Currently it is expected to contain at least the following attributes:
 
     ``last_exit_code``
-        Exit code returned by last shell command.
+        Exit code returned by last shell command. Is either one integer, 
+        ``sig{name}`` or ``sig{name}+core`` (latter two are only seen in ``rc`` 
+        shell).
 
     ``last_pipe_status``
         List of exit codes returned by last programs in the pipe or some false 
-        object. Only available in ``zsh``.
+        object. Only available in ``zsh`` and ``rc``. Is a list of either 
+        integers, ``sig{name}`` or ``sig{name}+core`` (latter two are only seen 
+        in ``rc`` shell).
 
     ``jobnum``
         Number of background jobs.
 
     ``renderer_arg``
         Dictionary containing some keys that are additional arguments used by 
-        shell bindings. *You must not use this attribute directly*: all 
+        shell bindings. *This attribute must not be used directly*: all 
         arguments from this dictionary are merged with ``segment_info`` 
         dictionary. Known to have at least the following keys:
 
         ``client_id``
             Identifier unique to one shell instance. Is used to record instance 
-            state by powerline daemon.
+            state by powerline daemon. In tmux this is the same as :ref:`pane_id 
+            <dev-seginfo-shell-renarg-pane_id>`.
 
             It is not guaranteed that existing client ID will not be retaken 
             when old shell with this ID quit: usually process PID is used as 
@@ -447,6 +482,14 @@ Shell
             Local theme that will be used by shell. One should not rely on the 
             existence of this key.
 
+        .. _dev-seginfo-shell-renarg-pane_id:
+
+        ``pane_id``
+            Identifier unique to each tmux pane. Is always an integer, optional. 
+            Obtained by using ``tmux display -p '#D'``, then all leading spaces 
+            and per cent signs are stripped and the result is converted into an 
+            integer.
+
         Other keys, if any, are specific to segments.
 
 Ipython
@@ -458,6 +501,37 @@ Ipython
 
     Attribute ``prompt_count`` contains the so-called “history count” 
     (equivalent to ``\N`` in ``in_template``).
+
+Pdb
+---
+
+``pdb``
+    Currently active :py:class:`pdb.Pdb` instance.
+
+``curframe``
+    Frame which will be run next. Note: due to the existence of 
+    :py:func:`powerline.listers.pdb.frame_lister` one must not use 
+    ``segment_info['pdb'].curframe``.
+
+``initial_stack_length``
+    Equal to the length of :py:attr:`pdb.Pdb.stack` at the first invocation of 
+    the prompt decremented by one.
+
+i3wm
+----
+
+``mode``
+    Currently active i3 mode (as a string).
+
+``output``
+    ``xrandr`` output name currently drawing to. Currently only available
+    in lemonbar bindings.
+
+``workspace``
+    dictionary containing the workspace name under the key ``"name"`` and 
+    boolean values for the ``"visible"``, ``"urgent"`` and ``"focused"`` 
+    keys, indicating the state of the workspace. Currently only provided by 
+    the :py:func:`powerline.listers.i3wm.workspace_lister` lister.
 
 Segment class
 =============

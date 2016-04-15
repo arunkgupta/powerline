@@ -20,7 +20,8 @@ class StrFunction(object):
 
 TMUX_ACTIONS = {
 	'source': StrFunction(config.source_tmux_files, 'source'),
-	'setenv': StrFunction(config.init_environment, 'setenv'),
+	'setenv': StrFunction(config.init_tmux_environment, 'setenv'),
+	'setup': StrFunction(config.tmux_setup, 'setup'),
 }
 
 
@@ -43,7 +44,12 @@ class ConfigArgParser(argparse.ArgumentParser):
 
 def get_argparser(ArgumentParser=ConfigArgParser):
 	parser = ArgumentParser(description='Script used to obtain powerline configuration.')
-	parser.add_argument('-p', '--config_path', action='append', metavar='PATH', help='Path to configuration directory. If it is present then configuration files will only be seeked in the provided path. May be provided multiple times to search in a list of directories.')
+	parser.add_argument(
+		'-p', '--config-path', action='append', metavar='PATH',
+		help='Path to configuration directory. If it is present '
+		     'then configuration files will only be seeked in the provided path. '
+		     'May be provided multiple times to search in a list of directories.'
+	)
 	subparsers = parser.add_subparsers()
 	tmux_parser = subparsers.add_parser('tmux', help='Tmux-specific commands')
 	tmux_parser.add_argument(
@@ -51,7 +57,27 @@ def get_argparser(ArgumentParser=ConfigArgParser):
 		choices=tuple(TMUX_ACTIONS.values()),
 		metavar='ACTION',
 		type=(lambda v: TMUX_ACTIONS.get(v)),
-		help='If action is `source\' then version-specific tmux configuration files are sourced, if it is `setenv\' then special (prefixed with `_POWERLINE\') tmux global environment variables are filled with data from powerline configuration.'
+		help='If action is `source\' then version-specific tmux configuration '
+		     'files are sourced, if it is `setenv\' then special '
+		     '(prefixed with `_POWERLINE\') tmux global environment variables '
+		     'are filled with data from powerline configuration. '
+		     'Action `setup\' is just doing `setenv\' then `source\'.'
+	)
+	tpg = tmux_parser.add_mutually_exclusive_group()
+	tpg.add_argument(
+		'-s', '--source', action='store_true', default=None,
+		help='When using `setup\': always use configuration file sourcing. '
+		     'By default this is determined automatically based on tmux '
+		     'version: this is the default for tmux 1.8 and below.',
+	)
+	tpg.add_argument(
+		'-n', '--no-source', action='store_false', dest='source', default=None,
+		help='When using `setup\': in place of sourcing directly execute '
+		     'configuration files. That is, read each needed '
+		     'powerline-specific configuration file, substitute '
+		     '`$_POWERLINE_…\' variables with appropriate values and run '
+		     '`tmux config line\'. This is the default behaviour for '
+		     'tmux 1.9 and above.'
 	)
 
 	shell_parser = subparsers.add_parser('shell', help='Shell-specific commands')
@@ -60,14 +86,20 @@ def get_argparser(ArgumentParser=ConfigArgParser):
 		choices=tuple(SHELL_ACTIONS.values()),
 		type=(lambda v: SHELL_ACTIONS.get(v)),
 		metavar='ACTION',
-		help='If action is `command\' then preferred powerline command is output, if it is `uses\' then powerline-config script will exit with 1 if specified component is disabled and 0 otherwise.',
+		help='If action is `command\' then preferred powerline command is '
+		     'output, if it is `uses\' then powerline-config script will exit '
+		     'with 1 if specified component is disabled and 0 otherwise.',
 	)
 	shell_parser.add_argument(
 		'component',
 		nargs='?',
 		choices=('tmux', 'prompt'),
 		metavar='COMPONENT',
-		help='Only applicable for `uses\' subcommand: makes `powerline-config\' exit with 0 if specific component is enabled and with 1 otherwise. `tmux\' component stands for tmux bindings (e.g. those that notify tmux about current directory changes), `prompt\' component stands for shell prompt.'
+		help='Only applicable for `uses\' subcommand: makes `powerline-config\' '
+		     'exit with 0 if specific component is enabled and with 1 otherwise. '
+		     '`tmux\' component stands for tmux bindings '
+		     '(e.g. those that notify tmux about current directory changes), '
+		     '`prompt\' component stands for shell prompt.'
 	)
 	shell_parser.add_argument(
 		'-s', '--shell',

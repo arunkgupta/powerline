@@ -50,7 +50,7 @@ class PlayerSegment(Segment):
 		stats['state_symbol'] = state_symbols.get(stats['state'])
 		return [{
 			'contents': format.format(**stats),
-			'highlight_group': ['now_playing', 'player_' + (stats['state'] or 'fallback'), 'player'],
+			'highlight_groups': ['player_' + (stats['state'] or 'fallback'), 'player'],
 		}]
 
 	def get_player_status(self, pl):
@@ -167,14 +167,16 @@ Requires cmus-remote command be acessible from $PATH.
 
 
 class MpdPlayerSegment(PlayerSegment):
-	def get_player_status(self, pl, host='localhost', port=6600):
+	def get_player_status(self, pl, host='localhost', password=None, port=6600):
 		try:
 			import mpd
 		except ImportError:
+			if password:
+				host = password + '@' + host
 			now_playing = run_cmd(pl, [
 				'mpc', 'current',
 				'-f', '%album%\n%artist%\n%title%\n%time%',
-				'-h', str(host),
+				'-h', host,
 				'-p', str(port)
 			], strip=False)
 			if not now_playing:
@@ -187,8 +189,14 @@ class MpdPlayerSegment(PlayerSegment):
 				'total': now_playing[3],
 			}
 		else:
-			client = mpd.MPDClient()
+			try:
+				client = mpd.MPDClient(use_unicode=True)
+			except TypeError:
+				# python-mpd 1.x does not support use_unicode
+				client = mpd.MPDClient()
 			client.connect(host, port)
+			if password:
+				client.password(password)
 			now_playing = client.currentsong()
 			if not now_playing:
 				return
@@ -200,7 +208,7 @@ class MpdPlayerSegment(PlayerSegment):
 				'album': now_playing.get('album'),
 				'artist': now_playing.get('artist'),
 				'title': now_playing.get('title'),
-				'elapsed': _convert_seconds(now_playing.get('elapsed', 0)),
+				'elapsed': _convert_seconds(status.get('elapsed', 0)),
 				'total': _convert_seconds(now_playing.get('time', 0)),
 			}
 
@@ -208,11 +216,20 @@ class MpdPlayerSegment(PlayerSegment):
 mpd = with_docstring(MpdPlayerSegment(),
 ('''Return Music Player Daemon information
 
-Requires mpc command to be acessible from $PATH or ``mpd`` Python module.
+Requires ``mpd`` Python module (e.g. |python-mpd2|_ or |python-mpd|_ Python
+package) or alternatively the ``mpc`` command to be acessible from $PATH.
+
+.. |python-mpd| replace:: ``python-mpd``
+.. _python-mpd: https://pypi.python.org/pypi/python-mpd
+
+.. |python-mpd2| replace:: ``python-mpd2``
+.. _python-mpd2: https://pypi.python.org/pypi/python-mpd2
 
 {0}
 :param str host:
 	Host on which mpd runs.
+:param str password:
+	Password used for connecting to daemon.
 :param int port:
 	Port which should be connected to.
 ''').format(_common_args.format('mpd')))
@@ -460,24 +477,3 @@ Requires ``osascript`` available in $PATH.
 
 {0}
 ''').format(_common_args.format('rdio')))
-
-
-class NowPlayingSegment(Segment):
-	def __call__(self, player='mpd', **kwargs):
-		player_segment = globals()[player]
-		assert(isinstance(player_segment, PlayerSegment))
-		return player_segment(**kwargs)
-
-	def argspecobjs(self):
-		for ret in super(NowPlayingSegment, self).argspecobjs():
-			yield ret
-		yield '__call__', PlayerSegment.__call__
-		for k, v in globals().items():
-			if isinstance(v, type) and issubclass(v, PlayerSegment) and v is not DbusPlayerSegment:
-				yield 'get_player_status', v.get_player_status
-
-	def omitted_args(self, name, method):
-		return (0,)
-
-
-now_playing = NowPlayingSegment()

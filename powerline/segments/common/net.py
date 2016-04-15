@@ -68,12 +68,13 @@ Divider highlight group used: ``background:divider``.
 try:
 	import netifaces
 except ImportError:
-	def internal_ip(pl, interface='detect', ipv=4):
+	def internal_ip(pl, interface='auto', ipv=4):
 		return None
 else:
 	_interface_starts = {
 		'eth':      10,  # Regular ethernet adapters         : eth1
 		'enp':      10,  # Regular ethernet adapters, Gentoo : enp2s0
+		'en':       10,  # OS X                              : en0 
 		'ath':       9,  # Atheros WiFi adapters             : ath0
 		'wlan':      9,  # Other WiFi adapters               : wlan1
 		'wlp':       9,  # Other WiFi adapters, Gentoo       : wlp5s0
@@ -100,17 +101,25 @@ else:
 		else:
 			return 0
 
-	def internal_ip(pl, interface='detect', ipv=4):
-		if interface == 'detect':
+	def internal_ip(pl, interface='auto', ipv=4):
+		family = netifaces.AF_INET6 if ipv == 6 else netifaces.AF_INET
+		if interface == 'auto':
 			try:
 				interface = next(iter(sorted(netifaces.interfaces(), key=_interface_key, reverse=True)))
 			except StopIteration:
 				pl.info('No network interfaces found')
 				return None
+		elif interface == 'default_gateway':
+			try:
+				interface = netifaces.gateways()['default'][family][1]
+			except KeyError:
+				pl.info('No default gateway found for IPv{0}', ipv)
+				return None
 		addrs = netifaces.ifaddresses(interface)
 		try:
-			return addrs[netifaces.AF_INET6 if ipv == 6 else netifaces.AF_INET][0]['addr']
+			return addrs[family][0]['addr']
 		except (KeyError, IndexError):
+			pl.info("No IPv{0} address found for interface {1}", ipv, interface)
 			return None
 
 
@@ -120,7 +129,7 @@ internal_ip = with_docstring(internal_ip,
 Requires ``netifaces`` module to work properly.
 
 :param str interface:
-	Interface on which IP will be checked. Use ``detect`` to automatically 
+	Interface on which IP will be checked. Use ``auto`` to automatically 
 	detect interface. In this case interfaces with lower numbers will be 
 	preferred over interfaces with similar names. Order of preference based on 
 	names:
@@ -130,6 +139,11 @@ Requires ``netifaces`` module to work properly.
 	#. ``teredo`` followed by number or the end of string.
 	#. Any other interface that is not ``lo*``.
 	#. ``lo`` followed by number or the end of string.
+
+	Use ``default_gateway`` to detect the interface based on the machine's
+	`default gateway <https://en.wikipedia.org/wiki/Default_gateway>`_ (i.e.,
+	the router to which it is connected).
+
 :param int ipv:
 	4 or 6 for ipv4 and ipv6 respectively, depending on which IP address you 
 	need exactly.
@@ -150,7 +164,10 @@ try:
 		return if_io.bytes_recv, if_io.bytes_sent
 
 	def _get_interfaces():
-		io_counters = psutil.network_io_counters(pernic=True)
+		try:
+			io_counters = psutil.net_io_counters(pernic=True)
+		except AttributeError:
+			io_counters = psutil.network_io_counters(pernic=True)
 		for interface, data in io_counters.items():
 			if data:
 				yield interface, data.bytes_recv, data.bytes_sent
@@ -174,11 +191,11 @@ class NetworkLoadSegment(KwThreadedSegment):
 	replace_num_pat = re.compile(r'[a-zA-Z]+')
 
 	@staticmethod
-	def key(interface='detect', **kwargs):
+	def key(interface='auto', **kwargs):
 		return interface
 
 	def compute_state(self, interface):
-		if interface == 'detect':
+		if interface == 'auto':
 			proc_exists = getattr(self, 'proc_exists', None)
 			if proc_exists is None:
 				proc_exists = self.proc_exists = os.path.exists('/proc/net/route')
@@ -192,7 +209,7 @@ class NetworkLoadSegment(KwThreadedSegment):
 							if not destination.replace(b'0', b''):
 								interface = iface.decode('utf-8')
 								break
-			if interface == 'detect':
+			if interface == 'auto':
 				# Choose interface with most total activity, excluding some
 				# well known interface names
 				interface, total = 'eth0', -1
@@ -247,8 +264,8 @@ class NetworkLoadSegment(KwThreadedSegment):
 				hl_groups[:0] = (group + '_gradient' for group in hl_groups)
 			r.append({
 				'contents': format.format(value=humanize_bytes(value, suffix, si_prefix)),
-				'divider_highlight_group': 'background:divider',
-				'highlight_group': hl_groups,
+				'divider_highlight_group': 'network_load:divider',
+				'highlight_groups': hl_groups,
 			})
 			if is_gradient:
 				max = kwargs[max_key]
@@ -268,23 +285,26 @@ falls back to reading
 :file:`/sys/class/net/{interface}/statistics/{rx,tx}_bytes`.
 
 :param str interface:
-	network interface to measure (use the special value "detect" to have powerline try to auto-detect the network interface)
+	Network interface to measure (use the special value "auto" to have powerline 
+	try to auto-detect the network interface).
 :param str suffix:
-	string appended to each load string
+	String appended to each load string.
 :param bool si_prefix:
-	use SI prefix, e.g. MB instead of MiB
+	Use SI prefix, e.g. MB instead of MiB.
 :param str recv_format:
-	format string, receives ``value`` as argument
+	Format string that determines how download speed should look like. Receives 
+	``value`` as argument.
 :param str sent_format:
-	format string, receives ``value`` as argument
+	Format string that determines how upload speed should look like. Receives 
+	``value`` as argument.
 :param float recv_max:
-	maximum number of received bytes per second. Is only used to compute
-	gradient level
+	Maximum number of received bytes per second. Is only used to compute
+	gradient level.
 :param float sent_max:
-	maximum number of sent bytes per second. Is only used to compute gradient
-	level
+	Maximum number of sent bytes per second. Is only used to compute gradient
+	level.
 
-Divider highlight group used: ``background:divider``.
+Divider highlight group used: ``network_load:divider``.
 
 Highlight groups used: ``network_load_sent_gradient`` (gradient) or ``network_load_recv_gradient`` (gradient) or ``network_load_gradient`` (gradient), ``network_load_sent`` or ``network_load_recv`` or ``network_load``.
 ''')

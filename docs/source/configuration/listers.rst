@@ -16,10 +16,20 @@ their type and ``segments`` key with a list of segments (a bit more details in
 
 More information in :ref:`Writing listers <dev-listers>` section.
 
-Currently only Vim listers are available.
-
 Vim listers
 -----------
 
 .. automodule:: powerline.listers.vim
+   :members:
+
+Pdb listers
+-----------
+
+.. automodule:: powerline.listers.pdb
+   :members:
+
+i3wm listers
+----------
+
+.. automodule:: powerline.listers.i3wm
    :members:

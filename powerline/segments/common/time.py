@@ -16,9 +16,14 @@ def date(pl, format='%Y-%m-%d', istime=False):
 
 	Highlight groups used: ``time`` or ``date``.
 	'''
+	try:
+		contents = datetime.now().strftime(format)
+	except UnicodeEncodeError:
+		contents = datetime.now().strftime(format.encode('utf-8')).decode('utf-8')
+
 	return [{
-		'contents': datetime.now().strftime(format),
-		'highlight_group': (['time'] if istime else []) + ['date'],
+		'contents': contents,
+		'highlight_groups': (['time'] if istime else []) + ['date'],
 		'divider_highlight_group': 'time:divider' if istime else None,
 	}]
 

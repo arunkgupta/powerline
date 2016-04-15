@@ -16,15 +16,20 @@ class Pl(object):
 		self.use_daemon_threads = True
 
 	for meth in ('error', 'warn', 'debug', 'exception', 'info'):
-		exec ((
+		exec((
 			'def {0}(self, msg, *args, **kwargs):\n'
 			'	self.{0}s.append((kwargs.get("prefix") or self.prefix, msg, args, kwargs))\n'
 		).format(meth))
 
+	def __nonzero__(self):
+		return bool(self.exceptions or self.errors or self.warns)
+
+	__bool__ = __nonzero__
+
 
 class Args(object):
-	theme_option = {}
-	config = None
+	theme_override = {}
+	config_override = {}
 	config_path = None
 	ext = ['shell']
 	renderer_module = None

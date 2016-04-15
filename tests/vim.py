@@ -191,9 +191,6 @@ def command(cmd):
 	elif cmd.startswith('hi '):
 		sp = cmd.split()
 		_highlights[sp[1]] = sp[2:]
-	elif cmd.startswith('function! Powerline_plugin_ctrlp'):
-		# Ignore CtrlP updating functions
-		pass
 	elif cmd.startswith('augroup'):
 		augroup = cmd.partition(' ')[2]
 		if augroup.upper() == 'END':
@@ -268,6 +265,14 @@ def eval(expr):
 		import os
 		assert os.path.basename(current.buffer.name).startswith('NERD_tree_')
 		return '/usr/include'
+	elif expr.startswith('getbufvar('):
+		import re
+		match = re.match(r'^getbufvar\((\d+), ["\'](.+)["\']\)$', expr)
+		if not match:
+			raise NotImplementedError(expr)
+		bufnr = int(match.group(1))
+		varname = match.group(2)
+		return _emul_getbufvar(bufnr, varname)
 	elif expr == 'tabpagenr()':
 		return current.tabpage.number
 	elif expr == 'tabpagenr("$")':
@@ -858,9 +863,6 @@ class _WithBufName(object):
 		self.buffer = buffer
 		self.old = buffer.name
 		buffer.name = self.new
-		if buffer.name and os.path.basename(buffer.name) == 'ControlP':
-			buffer.vars['powerline_ctrlp_type'] = 'main'
-			buffer.vars['powerline_ctrlp_args'] = ['focus', 'byfname', '0', 'prev', 'item', 'next', 'marked']
 
 	def __exit__(self, *args):
 		self.buffer.name = self.old

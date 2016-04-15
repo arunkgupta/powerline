@@ -33,7 +33,7 @@ generic_keys = set((
 ))
 type_keys = {
 	'function': set(('function', 'args', 'draw_inner_divider')),
-	'string': set(('contents', 'type', 'highlight_group', 'divider_highlight_group')),
+	'string': set(('contents', 'type', 'highlight_groups', 'divider_highlight_group')),
 	'segment_list': set(('function', 'segments', 'args', 'type')),
 }
 required_keys = {
@@ -41,7 +41,7 @@ required_keys = {
 	'string': set(()),
 	'segment_list': set(('function', 'segments',)),
 }
-highlight_keys = set(('highlight_group', 'name'))
+highlight_keys = set(('highlight_groups', 'name'))
 
 
 def get_function_strings(function_name, context, ext):
@@ -173,41 +173,47 @@ def check_group(group, data, context, echoerr):
 		return True, False, False
 	colorscheme = data['colorscheme']
 	ext = data['ext']
-	configs = []
+	configs = None
 	if ext:
+		def listed_key(d, k):
+			try:
+				return [d[k]]
+			except KeyError:
+				return []
+
 		if colorscheme == '__main__':
-			configs.append([config for config in data['ext_colorscheme_configs'][ext].items()])
-			configs.append([config for config in data['top_colorscheme_configs'].items()])
+			colorscheme_names = set(data['ext_colorscheme_configs'][ext])
+			colorscheme_names.update(data['top_colorscheme_configs'])
+			colorscheme_names.discard('__main__')
+			configs = [
+				(
+					name,
+					listed_key(data['ext_colorscheme_configs'][ext], name)
+					+ listed_key(data['ext_colorscheme_configs'][ext], '__main__')
+					+ listed_key(data['top_colorscheme_configs'], name)
+				)
+				for name in colorscheme_names
+			]
 		else:
-			try:
-				configs.append([data['ext_colorscheme_configs'][ext][colorscheme]])
-			except KeyError:
-				pass
-			try:
-				configs.append([data['ext_colorscheme_configs'][ext]['__main__']])
-			except KeyError:
-				pass
-			try:
-				configs.append([data['top_colorscheme_configs'][colorscheme]])
-			except KeyError:
-				pass
+			configs = [
+				(
+					colorscheme,
+					listed_key(data['ext_colorscheme_configs'][ext], colorscheme)
+					+ listed_key(data['ext_colorscheme_configs'][ext], '__main__')
+					+ listed_key(data['top_colorscheme_configs'], colorscheme)
+				)
+			]
 	else:
 		try:
-			configs.append([data['top_colorscheme_configs'][colorscheme]])
+			configs = [(colorscheme, [data['top_colorscheme_configs'][colorscheme]])]
 		except KeyError:
 			pass
-	new_echoerr = DelayedEchoErr(echoerr)
 	hadproblem = False
-	for config_lst in configs:
-		tofind = len(config_lst)
+	for new_colorscheme, config_lst in configs:
 		not_found = []
+		new_data = data.copy()
+		new_data['colorscheme'] = new_colorscheme
 		for config in config_lst:
-			if isinstance(config, tuple):
-				new_colorscheme, config = config
-				new_data = data.copy()
-				new_data['colorscheme'] = new_colorscheme
-			else:
-				new_data = data
 			havemarks(config)
 			try:
 				group_data = config['groups'][group]
@@ -222,21 +228,17 @@ def check_group(group, data, context, echoerr):
 				)
 				if chadproblem:
 					hadproblem = True
-				else:
-					tofind -= 1
-					if not tofind:
-						return proceed, echo, hadproblem
 				if not proceed:
 					break
-		if not_found:
-			new_echoerr(
+		if not_found and len(not_found) == len(config_lst):
+			echoerr(
 				context='Error while checking group definition in colorscheme (key {key})'.format(
 					key=context.key),
-				problem='name {0} is not present in {1} {2} colorschemes: {3}'.format(
-					group, tofind, ext, ', '.join(not_found)),
+				problem='name {0} is not present anywhere in {1} {2} {3} colorschemes: {4}'.format(
+					group, len(not_found), ext, new_colorscheme, ', '.join(not_found)),
 				problem_mark=group.mark
 			)
-	new_echoerr.echo_all()
+			hadproblem = True
 	return True, False, hadproblem
 
 
@@ -281,7 +283,7 @@ def check_key_compatibility(segment, data, context, echoerr):
 			context_mark=context[-1][1].mark,
 			problem=(
 				'found missing keys required to determine highlight group. '
-				'Either highlight_group or name key must be present'
+				'Either highlight_groups or name key must be present'
 			)
 		)
 		hadproblem = True
@@ -344,6 +346,28 @@ def check_full_segment_data(segment, data, context, echoerr):
 	return check_key_compatibility(segment_copy, data, context, echoerr)
 
 
+highlight_group_spec = Spec().ident().copy
+_highlight_group_spec = highlight_group_spec().context_message(
+	'Error while checking function documentation while checking theme (key {key})')
+
+
+def check_hl_group_name(hl_group, context_mark, context, echoerr):
+	'''Check highlight group name: it should match naming conventions
+
+	:param str hl_group:
+		Checked group.
+	:param Mark context_mark:
+		Context mark. May be ``None``.
+	:param Context context:
+		Current context.
+	:param func echoerr:
+		Function used for error reporting.
+
+	:return: ``False`` if check succeeded and ``True`` if it failed.
+	'''
+	return _highlight_group_spec.match(hl_group, context_mark=context_mark, context=context, echoerr=echoerr)[1]
+
+
 def check_segment_function(function_name, data, context, echoerr):
 	havemarks(function_name)
 	ext = data['ext']
@@ -357,7 +381,10 @@ def check_segment_function(function_name, data, context, echoerr):
 		hl_groups = []
 		divider_hl_group = None
 
+		hadproblem = False
+
 		if func.__doc__:
+			NO_H_G_USED_STR = 'No highlight groups are used (literal segment).'
 			H_G_USED_STR = 'Highlight groups used: '
 			LHGUS = len(H_G_USED_STR)
 			D_H_G_USED_STR = 'Divider highlight group used: '
@@ -367,6 +394,20 @@ def check_segment_function(function_name, data, context, echoerr):
 			for i, line in enumerate(func.__doc__.split('\n')):
 				if H_G_USED_STR in line:
 					idx = line.index(H_G_USED_STR) + LHGUS
+					if hl_groups is None:
+						idx -= LHGUS
+						mark = Mark(mark_name, i + 1, idx + 1, func.__doc__, pointer + idx)
+						echoerr(
+							context='Error while checking theme (key {key})'.format(key=context.key),
+							context_mark=function_name.mark,
+							problem=(
+								'found highlight group definition in addition to sentense stating that '
+								'no highlight groups are used'
+							),
+							problem_mark=mark,
+						)
+						hadproblem = True
+						continue
 					hl_groups.append((
 						line[idx:],
 						(mark_name, i + 1, idx + 1, func.__doc__),
@@ -376,21 +417,38 @@ def check_segment_function(function_name, data, context, echoerr):
 					idx = line.index(D_H_G_USED_STR) + LDHGUS + 2
 					mark = Mark(mark_name, i + 1, idx + 1, func.__doc__, pointer + idx)
 					divider_hl_group = MarkedUnicode(line[idx:-3], mark)
+				elif NO_H_G_USED_STR in line:
+					idx = line.index(NO_H_G_USED_STR)
+					if hl_groups:
+						mark = Mark(mark_name, i + 1, idx + 1, func.__doc__, pointer + idx)
+						echoerr(
+							context='Error while checking theme (key {key})'.format(key=context.key),
+							context_mark=function_name.mark,
+							problem=(
+								'found sentense stating that no highlight groups are used '
+								'in addition to highlight group definition'
+							),
+							problem_mark=mark,
+						)
+						hadproblem = True
+						continue
+					hl_groups = None
 				pointer += len(line) + len('\n')
-
-		hadproblem = False
 
 		if divider_hl_group:
 			r = hl_exists(divider_hl_group, data, context, echoerr, allow_gradients=True)
 			if r:
 				echoerr(
 					context='Error while checking theme (key {key})'.format(key=context.key),
+					context_mark=function_name.mark,
 					problem=(
 						'found highlight group {0} not defined in the following colorschemes: {1}\n'
 						'(Group name was obtained from function documentation.)'
 					).format(divider_hl_group, list_sep.join(r)),
-					problem_mark=function_name.mark
+					problem_mark=divider_hl_group.mark,
 				)
+				hadproblem = True
+			if check_hl_group_name(divider_hl_group, function_name.mark, context, echoerr):
 				hadproblem = True
 
 		if hl_groups:
@@ -409,6 +467,8 @@ def check_segment_function(function_name, data, context, echoerr):
 								match.group(1),
 								Mark(*mark_args, pointer=sub_pointer + match.start(1))
 							)
+							if check_hl_group_name(hl_group, function_name.mark, context, echoerr):
+								hadproblem = True
 							gradient = bool(match.group(2))
 							required_pack.append((hl_group, gradient))
 						finally:
@@ -437,7 +497,7 @@ def check_segment_function(function_name, data, context, echoerr):
 								h[0], list_sep.join(r))
 						)
 					hadproblem = True
-		else:
+		elif hl_groups is not None:
 			r = hl_exists(function_name, data, context, echoerr, allow_gradients=True)
 			if r:
 				echoerr(
@@ -472,6 +532,56 @@ def check_segment_function(function_name, data, context, echoerr):
 	return True, False, False
 
 
+def hl_group_in_colorscheme(hl_group, cconfig, allow_gradients, data, context, echoerr):
+	havemarks(hl_group, cconfig)
+	if hl_group not in cconfig.get('groups', {}):
+		return False
+	elif not allow_gradients or allow_gradients == 'force':
+		group_config = cconfig['groups'][hl_group]
+		while isinstance(group_config, unicode):
+			try:
+				group_config = cconfig['groups'][group_config]
+			except KeyError:
+				# No such group. Error was already reported when checking 
+				# colorschemes.
+				return True
+		havemarks(group_config)
+		hadgradient = False
+		for ckey in ('fg', 'bg'):
+			color = group_config.get(ckey)
+			if not color:
+				# No color. Error was already reported when checking 
+				# colorschemes.
+				return True
+			havemarks(color)
+			# Gradients are only allowed for function segments. Note that 
+			# whether *either* color or gradient exists should have been 
+			# already checked
+			hascolor = color in data['colors_config'].get('colors', {})
+			hasgradient = color in data['colors_config'].get('gradients', {})
+			if hasgradient:
+				hadgradient = True
+			if allow_gradients is False and not hascolor and hasgradient:
+				echoerr(
+					context='Error while checking highlight group in theme (key {key})'.format(
+						key=context.key),
+					context_mark=hl_group.mark,
+					problem='group {0} is using gradient {1} instead of a color'.format(hl_group, color),
+					problem_mark=color.mark
+				)
+				return False
+		if allow_gradients == 'force' and not hadgradient:
+			echoerr(
+				context='Error while checking highlight group in theme (key {key})'.format(
+					key=context.key),
+				context_mark=hl_group.mark,
+				problem='group {0} should have at least one gradient color, but it has no'.format(hl_group),
+				problem_mark=group_config.mark
+			)
+			return False
+	return True
+
+
 def hl_exists(hl_group, data, context, echoerr, allow_gradients=False):
 	havemarks(hl_group)
 	ext = data['ext']
@@ -480,45 +590,14 @@ def hl_exists(hl_group, data, context, echoerr, allow_gradients=False):
 		# twice
 		return []
 	r = []
+	found = False
 	for colorscheme, cconfig in data['colorscheme_configs'][ext].items():
-		if hl_group not in cconfig.get('groups', {}):
+		if hl_group_in_colorscheme(hl_group, cconfig, allow_gradients, data, context, echoerr):
+			found = True
+		else:
 			r.append(colorscheme)
-		elif not allow_gradients or allow_gradients == 'force':
-			group_config = cconfig['groups'][hl_group]
-			havemarks(group_config)
-			hadgradient = False
-			for ckey in ('fg', 'bg'):
-				color = group_config.get(ckey)
-				if not color:
-					# No color. Error was already reported.
-					continue
-				havemarks(color)
-				# Gradients are only allowed for function segments. Note that 
-				# whether *either* color or gradient exists should have been 
-				# already checked
-				hascolor = color in data['colors_config'].get('colors', {})
-				hasgradient = color in data['colors_config'].get('gradients', {})
-				if hasgradient:
-					hadgradient = True
-				if allow_gradients is False and not hascolor and hasgradient:
-					echoerr(
-						context='Error while checking highlight group in theme (key {key})'.format(
-							key=context.key),
-						context_mark=hl_group.mark,
-						problem='group {0} is using gradient {1} instead of a color'.format(hl_group, color),
-						problem_mark=color.mark
-					)
-					r.append(colorscheme)
-					continue
-			if allow_gradients == 'force' and not hadgradient:
-				echoerr(
-					context='Error while checking highlight group in theme (key {key})'.format(
-						key=context.key),
-					context_mark=hl_group.mark,
-					problem='group {0} should have at least one gradient color, but it has no'.format(hl_group),
-					problem_mark=group_config.mark
-				)
-				r.append(colorscheme)
+	if not found:
+		pass
 	return r
 
 
@@ -720,4 +799,68 @@ def check_exinclude_function(name, data, context, echoerr):
 	func = import_function('selector', name, data, context, echoerr, module=module)
 	if not func:
 		return True, False, True
+	return True, False, False
+
+
+def check_log_file_level(this_level, data, context, echoerr):
+	'''Check handler level specified in :ref:`log_file key <config-common-log>`
+
+	This level must be greater or equal to the level in :ref:`log_level key 
+	<config-common-log_level>`.
+	'''
+	havemarks(this_level)
+	hadproblem = False
+	top_level = context[0][1].get('common', {}).get('log_level', 'WARNING')
+	top_level_str = top_level
+	top_level_mark = getattr(top_level, 'mark', None)
+	if (
+		not isinstance(top_level, unicode) or not hasattr(logging, top_level)
+		or not isinstance(this_level, unicode) or not hasattr(logging, this_level)
+	):
+		return True, False, hadproblem
+	top_level = getattr(logging, top_level)
+	this_level_str = this_level
+	this_level_mark = this_level.mark
+	this_level = getattr(logging, this_level)
+	if this_level < top_level:
+		echoerr(
+			context='Error while checking log level index (key {key})'.format(
+				key=context.key),
+			context_mark=this_level_mark,
+			problem='found level that is less critical then top level ({0} < {0})'.format(
+				this_level_str, top_level_str),
+			problem_mark=top_level_mark,
+		)
+		hadproblem = True
+	return True, False, hadproblem
+
+
+def check_logging_handler(handler_name, data, context, echoerr):
+	havemarks(handler_name)
+	import_paths = [os.path.expanduser(path) for path in context[0][1].get('common', {}).get('paths', [])]
+
+	handler_module, separator, handler_class = handler_name.rpartition('.')
+	if not separator:
+		handler_module = 'logging.handlers'
+		handler_class = handler_name
+	with WithPath(import_paths):
+		try:
+			handler = getattr(__import__(str(handler_module), fromlist=[str(handler_class)]), str(handler_class))
+		except ImportError:
+			echoerr(context='Error while loading logger class (key {key})'.format(key=context.key),
+			        problem='failed to load module {0}'.format(handler_module),
+			        problem_mark=handler_name.mark)
+			return True, False, True
+		except AttributeError:
+			echoerr(context='Error while loading logger class (key {key})'.format(key=context.key),
+			        problem='failed to load handler class {0}'.format(handler_class),
+			        problem_mark=handler_name.mark)
+			return True, False, True
+
+	if not issubclass(handler, logging.Handler):
+		echoerr(context='Error while loading logger class (key {key})'.format(key=context.key),
+		        problem='loaded class {0} is not a logging.Handler subclass'.format(handler_class),
+		        problem_mark=handler_name.mark)
+		return True, False, True
+
 	return True, False, False

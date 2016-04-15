@@ -13,7 +13,8 @@ from powerline.segments import with_docstring
 cpu_count = None
 
 
-def system_load(pl, format='{avg:.1f}', threshold_good=1, threshold_bad=2, track_cpu_count=False):
+def system_load(pl, format='{avg:.1f}', threshold_good=1, threshold_bad=2,
+                track_cpu_count=False, short=False):
 	'''Return system load average.
 
 	Highlights using ``system_load_good``, ``system_load_bad`` and
@@ -35,6 +36,8 @@ def system_load(pl, format='{avg:.1f}', threshold_good=1, threshold_bad=2, track
 	:param bool track_cpu_count:
 		if True powerline will continuously poll the system to detect changes
 		in the number of CPUs.
+	:param bool short:
+		if True only the sys load over last 1 minute will be displayed.
 
 	Divider highlight group used: ``background:divider``.
 
@@ -57,10 +60,14 @@ def system_load(pl, format='{avg:.1f}', threshold_good=1, threshold_bad=2, track
 			gradient_level = 100
 		ret.append({
 			'contents': format.format(avg=avg),
-			'highlight_group': ['system_load_gradient', 'system_load'],
+			'highlight_groups': ['system_load_gradient', 'system_load'],
 			'divider_highlight_group': 'background:divider',
 			'gradient_level': gradient_level,
 		})
+
+		if short:
+		    return ret
+
 	ret[0]['contents'] += ' '
 	ret[1]['contents'] += ' '
 	return ret
@@ -88,7 +95,7 @@ try:
 			return [{
 				'contents': format.format(cpu_percent),
 				'gradient_level': cpu_percent,
-				'highlight_group': ['cpu_load_percent_gradient', 'cpu_load_percent'],
+				'highlight_groups': ['cpu_load_percent_gradient', 'cpu_load_percent'],
 			}]
 except ImportError:
 	class CPULoadPercentSegment(ThreadedSegment):
@@ -131,10 +138,12 @@ if os.path.exists('/proc/uptime'):
 elif 'psutil' in globals():
 	from time import time
 
-	def _get_uptime():
-		# psutil.BOOT_TIME is not subject to clock adjustments, but time() is.
-		# Thus it is a fallback to /proc/uptime reading and not the reverse.
-		return int(time() - psutil.BOOT_TIME)
+	if hasattr(psutil, 'boot_time'):
+		def _get_uptime():
+			return int(time() - psutil.boot_time())
+	else:
+		def _get_uptime():
+			return int(time() - psutil.BOOT_TIME)
 else:
 	def _get_uptime():
 		raise NotImplementedError

@@ -24,7 +24,7 @@ Common configuration is a subdictionary that is a value of ``common`` key in
 ``term_truecolor``
     Defines whether to output cterm indices (8-bit) or RGB colors (24-bit) 
     to the terminal emulator. See the :ref:`term-feature-support-matrix` for 
-    information on whether your terminal emulator supports 24-bit colors.
+    information on whether used terminal emulator supports 24-bit colors.
 
     This variable is forced to be ``false`` if :ref:`term_escape_style 
     <config-common-term_escape_style>` option is set to ``"fbterm"`` or if it is 
@@ -55,7 +55,7 @@ Common configuration is a subdictionary that is a value of ``common`` key in
     Tells powerline what to do with characters with East Asian Width Class 
     Ambigious (such as Euro, Registered Sign, Copyright Sign, Greek
     letters, Cyrillic letters). Valid values: any positive integer; it is 
-    suggested that you only set it to 1 (default) or 2.
+    suggested that this option is only set it to 1 (default) or 2.
 
 .. _config-common-watcher:
 
@@ -77,12 +77,11 @@ Common configuration is a subdictionary that is a value of ``common`` key in
 
 ``additional_escapes``
     Valid for shell extensions, makes sense only if :ref:`term_truecolor 
-    <config-common-term_truecolor>` is enabled. Is to be set from command-line 
-    (unless you are sure you always need it). Controls additional escaping that 
-    is needed for tmux/screen to work with terminal true color escape codes: 
-    normally tmux/screen prevent terminal emulator from receiving these control 
-    codes thus rendering powerline prompt colorless. Valid values: ``"tmux"``, 
-    ``"screen"``, ``null`` (default).
+    <config-common-term_truecolor>` is enabled. Is to be set from command-line. 
+    Controls additional escaping that is needed for tmux/screen to work with 
+    terminal true color escape codes: normally tmux/screen prevent terminal 
+    emulator from receiving these control codes thus rendering powerline prompt 
+    colorless. Valid values: ``"tmux"``, ``"screen"``, ``null`` (default).
 
 .. _config-common-paths:
 
@@ -95,11 +94,37 @@ Common configuration is a subdictionary that is a value of ``common`` key in
 .. _config-common-log:
 
 ``log_file``
-    Defines path which will hold powerline logs. If not present, logging will be 
-    done to stderr.
+    Defines how logs will be handled. There are three variants here:
+
+    #. Absent. In this case logging will be done to stderr: equivalent to 
+       ``[["logging.StreamHandler", []]]`` or ``[null]``.
+    #. Plain string. In this case logging will be done to the given file: 
+       ``"/file/name"`` is equivalent to ``[["logging.FileHandler", 
+       [["/file/name"]]]]`` or ``["/file/name"]``. Leading ``~/`` is expanded in 
+       the file name, so using ``"~/.log/foo"`` is permitted. If directory 
+       pointed by the option is absent, it will be created, but not its parent.
+    #. List of handler definitions. Handler definition may either be ``null``, 
+       a string or a list with two or three elements:
+
+       #. Logging class name and module. If module name is absent, it is 
+          equivalent to ``logging.handlers``.
+       #. Class constructor arguments in a form ``[[args[, kwargs]]]``: accepted 
+          variants are ``[]`` (no arguments), ``[args]`` (e.g. 
+          ``[["/file/name"]]``: only positional arguments) or ``[args, kwargs]`` 
+          (e.g. ``[[], {"host": "localhost", "port": 6666}]``: positional and 
+          keyword arguments, but no positional arguments in the example).
+       #. Optional logging level. Overrides :ref:`log_level key 
+          <config-common-log_level>` and has the same format.
+       #. Optional format string. Partially overrides :ref:`log_format key 
+          <config-common-log_format>` and has the same format. “Partially” here 
+          means that it may only specify more critical level.
+
+.. _config-common-log_level:
 
 ``log_level``
     String, determines logging level. Defaults to ``WARNING``.
+
+.. _config-common-log_format:
 
 ``log_format``
     String, determines format of the log messages. Defaults to 
@@ -162,6 +187,10 @@ Common configuration is a subdictionary that is a value of ``ext`` key in
     ``out`` and ``rewrite`` prompts (refer to IPython documentation for more 
     details) while ``in`` prompt is the default.
 
+    For wm (:ref:`lemonbar <lemonbar-usage>` only) it is a dictionary 
+    ``{output : theme_name}`` that maps the ``xrandr`` output names to the 
+    local themes to use on that output.
+
 ``components``
     Determines which extension components should be enabled. This key is highly 
     extension-specific, here is the table of extensions and corresponding 
@@ -210,8 +239,8 @@ Color definitions
     * A list of cterm color indicies.
     * A list of hex color strings.
 
-    It is expected that you define gradients from least alert color to most 
-    alert or use non-alert colors.
+    It is expected that gradients are defined from least alert color to most 
+    alert or non-alert colors are used.
 
 .. _config-colorschemes:
 
@@ -248,11 +277,11 @@ override those from each previous file. It is required that either
            Background color. Must be defined in :ref:`colors 
            <config-colors-colors>`.
 
-       ``attr``
+       ``attrs``
            List of attributes. Valid values are one or more of ``bold``, 
            ``italic`` and ``underline``. Note that some attributes may be 
-           unavailable in some applications or terminal emulators. If you do not 
-           need any attributes leave this empty.
+           unavailable in some applications or terminal emulators. If no 
+           attributes are needed this list should be left empty.
 
     #) a string (an alias): a name of existing group. This group’s definition 
        will be used when this color is requested.
@@ -331,9 +360,7 @@ ascii                       Theme without any unicode characters at all
 
 
 ``dividers``
-    Defines the dividers used in all Powerline extensions. This option 
-    should usually only be changed if you don’t have a patched font, or if 
-    you use a font patched with the legacy font patcher.
+    Defines the dividers used in all Powerline extensions.
 
     The ``hard`` dividers are used to divide segments with different 
     background colors, while the ``soft`` dividers are used to divide 
@@ -410,8 +437,8 @@ ascii                       Theme without any unicode characters at all
         ``string``
             A static string segment where the contents is defined in the 
             :ref:`contents option <config-themes-seg-contents>`, and the 
-            highlighting group is defined in the :ref:`highlight_group 
-            option <config-themes-seg-highlight_group>`.
+            highlighting group is defined in the :ref:`highlight_groups option 
+            <config-themes-seg-highlight_groups>`.
 
         ``segments_list``
             Sub-list of segments. This list only allows :ref:`function 
@@ -443,9 +470,9 @@ ascii                       Theme without any unicode characters at all
         or ``{function}``. If ``{module}`` is omitted :ref:`default_module 
         option <config-themes-default_module>` is used.
 
-    .. _config-themes-seg-highlight_group:
+    .. _config-themes-seg-highlight_groups:
 
-    ``highlight_group``
+    ``highlight_groups``
         Highlighting group for this segment. Consists of a prioritized list of 
         highlighting groups, where the first highlighting group that is 
         available in the colorscheme is used.
@@ -503,7 +530,7 @@ ascii                       Theme without any unicode characters at all
         rendered. A lower number means that the segment has a higher priority.
 
         Segments are removed according to their priority, with low priority 
-        segments being removed first.
+        segments (i.e. with a greater priority number) being removed first.
 
     .. _config-themes-seg-draw_divider:
 

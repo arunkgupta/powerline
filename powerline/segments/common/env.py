@@ -19,9 +19,20 @@ def environment(pl, segment_info, variable=None):
 
 
 @requires_segment_info
-def virtualenv(pl, segment_info):
-	'''Return the name of the current Python virtualenv.'''
-	return os.path.basename(segment_info['environ'].get('VIRTUAL_ENV', '')) or None
+def virtualenv(pl, segment_info, ignore_venv=False, ignore_conda=False):
+	'''Return the name of the current Python or conda virtualenv.
+
+	:param bool ignore_venv:
+		Whether to ignore virtual environments. Default is False.
+	:param bool ignore_conda:
+		Whether to ignore conda environments. Default is False.
+	'''
+	return (
+		(not ignore_venv and
+		 os.path.basename(segment_info['environ'].get('VIRTUAL_ENV', ''))) or
+		(not ignore_conda and
+		 segment_info['environ'].get('CONDA_DEFAULT_ENV', '')) or
+		None)
 
 
 @requires_segment_info
@@ -84,7 +95,7 @@ class CwdSegment(Segment):
 				'divider_highlight_group': 'cwd:divider',
 				'draw_inner_divider': draw_inner_divider,
 			})
-		ret[-1]['highlight_group'] = ['cwd:current_folder', 'cwd']
+		ret[-1]['highlight_groups'] = ['cwd:current_folder', 'cwd']
 		if use_path_separator:
 			ret[-1]['contents'] = ret[-1]['contents'][:-1]
 			if len(ret) > 1 and ret[0]['contents'][0] == os.sep:
@@ -148,11 +159,13 @@ username = False
 _geteuid = getattr(os, 'geteuid', lambda: 1)
 
 
-def user(pl, hide_user=None):
+def user(pl, hide_user=None, hide_domain=False):
 	'''Return the current user.
 
 	:param str hide_user:
 		Omit showing segment for users with names equal to this string.
+	:param bool hide_domain:
+		Drop domain component if it exists in a username (delimited by '@').
 
 	Highlights the user with the ``superuser`` if the effective user ID is 0.
 
@@ -166,8 +179,13 @@ def user(pl, hide_user=None):
 		return None
 	if username == hide_user:
 		return None
+	if hide_domain:
+		try:
+			username = username[:username.index('@')]
+		except ValueError:
+			pass
 	euid = _geteuid()
 	return [{
 		'contents': username,
-		'highlight_group': ['user'] if euid != 0 else ['superuser', 'user'],
+		'highlight_groups': ['user'] if euid != 0 else ['superuser', 'user'],
 	}]
